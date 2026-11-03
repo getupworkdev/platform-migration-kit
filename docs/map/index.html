@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Heritage map preview</title>
+<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<style>
+  :root { --bg:#f6f3ec; --ink:#1f2a1f; --muted:#5d6b5d; --card:#fffdf8; --line:#d9d3c4;
+          --monument:#7a5230; --sacred:#2f6b4f; --mythology:#5b3f8a; --well:#1f6f9f; --destination:#b8651b; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: Georgia, 'Times New Roman', serif; color:var(--ink); background:var(--bg); }
+  #app { display:grid; grid-template-columns: 340px 1fr; height:100vh; }
+  aside { border-right:1px solid var(--line); padding:18px 18px 12px; overflow:auto; background:var(--card); }
+  h1 { font-size:20px; margin:0 0 4px; font-weight:600; }
+  .sub { color:var(--muted); font-size:13px; margin:0 0 14px; line-height:1.4; }
+  .layers { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:14px; }
+  .layers label { display:inline-flex; align-items:center; gap:6px; font-size:13px; padding:5px 9px; border:1px solid var(--line); border-radius:999px; cursor:pointer; background:#fff; }
+  .layers label input { margin:0; }
+  .dot { width:10px; height:10px; border-radius:50%; display:inline-block; }
+  .list { display:flex; flex-direction:column; gap:6px; }
+  .item { padding:9px 10px; border:1px solid var(--line); border-radius:8px; cursor:pointer; background:#fff; }
+  .item:hover, .item.active { border-color:var(--ink); }
+  .item b { display:block; font-size:14px; font-weight:600; }
+  .item span { font-size:12px; color:var(--muted); }
+  .card { position:absolute; z-index:5; right:16px; bottom:16px; width:min(380px, calc(100% - 32px)); background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px 18px; box-shadow:0 6px 24px rgba(0,0,0,.12); display:none; }
+  .card.show { display:block; }
+  .card h2 { margin:0 0 2px; font-size:18px; }
+  .card .meta { font-size:12px; color:var(--muted); margin-bottom:8px; }
+  .card p { margin:0 0 10px; font-size:14px; line-height:1.45; }
+  .tag { font-size:11px; padding:2px 8px; border-radius:999px; color:#fff; display:inline-block; margin-right:4px; }
+  .evidence { font-size:11px; padding:2px 8px; border-radius:999px; border:1px solid var(--line); display:inline-block; }
+  .card a { font-size:13px; color:var(--ink); }
+  .card .close { position:absolute; top:8px; right:10px; border:0; background:none; font-size:18px; cursor:pointer; color:var(--muted); }
+  #map { position:relative; }
+  .note { font-size:11px; color:var(--muted); margin-top:14px; line-height:1.4; }
+  @media (max-width: 760px) { #app { grid-template-columns:1fr; grid-template-rows: 42vh 1fr; } aside { border-right:0; border-bottom:1px solid var(--line); } }
+</style>
+</head>
+<body>
+<div id="app">
+  <aside>
+    <h1>Heritage map preview</h1>
+    <p class="sub">Every marker is a record in the content database with coordinates. The map asks for what's in view; toggling a layer is a filter on the same records. Fictional site, not a client product.</p>
+    <div class="layers" id="layers"></div>
+    <div class="list" id="list"></div>
+    <p class="note">Rendered with MapLibre GL (the open-source fork of Mapbox GL, same API) so this page needs no access token. In production the same code runs on Mapbox GL with Mapbox styles and the Directions API for routes. Base map © OpenStreetMap contributors, tiles by OpenFreeMap.</p>
+  </aside>
+  <div id="map">
+    <div class="card" id="card"><button class="close" id="close">×</button><div id="cardBody"></div></div>
+  </div>
+</div>
+<script>
+const KINDS = { monument:'Monuments', sacred:'Sacred sites', mythology:'Mythology', well:'Holy wells', destination:'Destinations' };
+const COLORS = { monument:'#7a5230', sacred:'#2f6b4f', mythology:'#5b3f8a', well:'#1f6f9f', destination:'#b8651b' };
+const EVIDENCE = { archaeological:'Archaeologically supported', mixed:'History and tradition', tradition:'Folklore / tradition' };
+const active = new Set(Object.keys(KINDS));
+let sites;
+
+const map = new maplibregl.Map({ container:'map', style:'https://tiles.openfreemap.org/styles/positron', center:[-8.0, 53.3], zoom:6.2, attributionControl:true });
+map.addControl(new maplibregl.NavigationControl(), 'top-right');
+
+const mapReady = new Promise(res => map.once('load', () => map.once('idle', res)));
+fetch('sites.geojson').then(r => r.json()).then(data => {
+  sites = data;
+  mapReady.then(() => {
+    map.addSource('sites', { type:'geojson', data, cluster:true, clusterRadius:40, clusterMaxZoom:9 });
+    map.addLayer({ id:'clusters', type:'circle', source:'sites', filter:['has','point_count'],
+      paint:{ 'circle-color':'#1f2a1f', 'circle-radius':['step',['get','point_count'],16,5,22,10,28], 'circle-opacity':.85 } });
+    map.addLayer({ id:'cluster-count', type:'symbol', source:'sites', filter:['has','point_count'],
+      layout:{ 'text-field':['get','point_count_abbreviated'], 'text-font':['Noto Sans Bold'], 'text-size':12 }, paint:{ 'text-color':'#fff' } });
+    map.addLayer({ id:'points', type:'circle', source:'sites', filter:['!',['has','point_count']],
+      paint:{ 'circle-color':['match',['get','kind'], ...Object.entries(COLORS).flat(), '#333'], 'circle-radius':8, 'circle-stroke-width':2, 'circle-stroke-color':'#fff' } });
+    map.addLayer({ id:'labels', type:'symbol', source:'sites', filter:['!',['has','point_count']], minzoom:7,
+      layout:{ 'text-field':['get','name'], 'text-font':['Noto Sans Regular'], 'text-size':11, 'text-offset':[0,1.2], 'text-anchor':'top' }, paint:{ 'text-color':'#1f2a1f', 'text-halo-color':'#fff', 'text-halo-width':1 } });
+    map.on('click','clusters', e => { const f = map.queryRenderedFeatures(e.point,{layers:['clusters']})[0];
+      map.getSource('sites').getClusterExpansionZoom(f.properties.cluster_id, (err, z) => { if (!err) map.easeTo({ center:f.geometry.coordinates, zoom:z }); }); });
+    map.on('click','points', e => show(e.features[0].properties, e.features[0].geometry.coordinates));
+    for (const l of ['clusters','points']) { map.on('mouseenter', l, () => map.getCanvas().style.cursor='pointer'); map.on('mouseleave', l, () => map.getCanvas().style.cursor=''); }
+    renderLayers(); renderList();
+  });
+});
+
+function applyFilter() {
+  const kinds = [...active];
+  map.getSource('sites').setData({ type:'FeatureCollection', features: sites.features.filter(f => kinds.includes(f.properties.kind)) });
+  renderList();
+}
+function renderLayers() {
+  document.getElementById('layers').innerHTML = Object.entries(KINDS).map(([k,label]) =>
+    `<label><input type="checkbox" data-kind="${k}" checked><span class="dot" style="background:${COLORS[k]}"></span>${label}</label>`).join('');
+  document.querySelectorAll('#layers input').forEach(i => i.addEventListener('change', e => { e.target.checked ? active.add(e.target.dataset.kind) : active.delete(e.target.dataset.kind); applyFilter(); }));
+}
+function renderList() {
+  const items = sites.features.filter(f => active.has(f.properties.kind)).sort((a,b)=>a.properties.name.localeCompare(b.properties.name));
+  document.getElementById('list').innerHTML = items.map(f => `<div class="item" data-id="${f.properties.id}"><b>${f.properties.name}</b><span>${f.properties.region}</span></div>`).join('');
+  document.querySelectorAll('.item').forEach(el => el.addEventListener('click', () => { const f = items.find(x => x.properties.id === el.dataset.id);
+    map.flyTo({ center:f.geometry.coordinates, zoom:10 }); show(f.properties, f.geometry.coordinates); }));
+}
+function show(p, coords) {
+  document.querySelectorAll('.item').forEach(el => el.classList.toggle('active', el.dataset.id === p.id));
+  document.getElementById('cardBody').innerHTML = `
+    <h2>${p.name}</h2>
+    <div class="meta">${p.region}${p.era ? ' · ' + p.era : ''}</div>
+    <p>${p.summary}</p>
+    <span class="tag" style="background:${COLORS[p.kind]}">${KINDS[p.kind]}</span>
+    <span class="evidence">${EVIDENCE[p.evidence]}</span>
+    <p style="margin-top:10px"><a href="#/articles/${p.slug}">Read the article →</a> <span style="color:var(--muted);font-size:12px">(links to the structured record)</span></p>`;
+  document.getElementById('card').classList.add('show');
+}
+document.getElementById('close').addEventListener('click', () => document.getElementById('card').classList.remove('show'));
+</script>
+</body>
+</html>
