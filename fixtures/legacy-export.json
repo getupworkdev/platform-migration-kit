@@ -1,0 +1,23 @@
+{
+  "exportedAt": "2026-10-30T09:00:00Z",
+  "users": [
+    { "_id": "u_001", "email": "Aoife.Byrne@example.com", "name": "Aoife Byrne", "createdAt": "2025-02-11T10:00:00Z", "passwordHash": "$vendor$opaque" },
+    { "_id": "u_002", "email": "cian@example.com", "name": "Cian Walsh", "createdAt": "2025-03-02T08:30:00Z" },
+    { "_id": "u_003", "email": "aoife.byrne@example.com", "name": "Aoife (duplicate signup)", "createdAt": "2025-06-15T12:00:00Z" },
+    { "_id": "u_004", "email": "not-an-email", "name": "Broken Row", "createdAt": "2025-07-01T00:00:00Z" },
+    { "_id": "u_005", "email": "niamh@example.com", "createdAt": "2025-09-20T16:45:00Z" }
+  ],
+  "content": [
+    { "_id": "c_100", "type": "article", "slug": "stone-circle-of-the-valley", "headline": "The Stone Circle of the Valley", "bodyMarkdown": "# The circle\n\nTwelve stones...", "author": "u_001", "published": "2025-04-01T09:00:00Z", "heroImage": "img/circle.jpg", "tags": ["monument", "bronze-age"], "aiGenerated": { "model": "vendor-v2", "prompt": "write about..." }, "coordinates": { "lat": 53.0, "lng": -8.1 } },
+    { "_id": "c_101", "type": "article", "slug": "the-well-at-dawn", "headline": "The Well at Dawn", "bodyMarkdown": "Pilgrims came...", "author": "u_002", "published": "2025-05-10T09:00:00Z", "tags": ["holy-well", "folklore"] },
+    { "_id": "c_102", "type": "article", "headline": "Draft: Harvest Festivals", "bodyMarkdown": "Not yet published", "author": "u_002", "published": null },
+    { "_id": "c_103", "type": "article", "slug": "the-well-at-dawn", "headline": "The Well at Dawn (older duplicate)", "bodyMarkdown": "Earlier version", "author": "u_999", "published": "2025-01-01T00:00:00Z" },
+    { "_id": "c_104", "type": "page", "slug": "about", "headline": "About", "bodyMarkdown": "This site...", "published": "2025-01-01T00:00:00Z" }
+  ],
+  "routes": [
+    { "path": "/post/stone-circle-of-the-valley", "contentId": "c_100" },
+    { "path": "/post/the-well-at-dawn", "contentId": "c_101" },
+    { "path": "/about", "contentId": "c_104" },
+    { "path": "/post/deleted-thing", "contentId": "c_999" }
+  ]
+}
