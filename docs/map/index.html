@@ -34,6 +34,7 @@
   .card .close { position:absolute; top:8px; right:10px; border:0; background:none; font-size:18px; cursor:pointer; color:var(--muted); }
   #map { position:relative; }
   .route { width:100%; margin:0 0 12px; padding:9px 12px; border-radius:8px; border:1px solid var(--ink); background:var(--ink); color:#fff; font:inherit; font-size:14px; cursor:pointer; }
+  .route:disabled { opacity:.5; cursor:wait; }
   .route.on { background:#fff; color:var(--ink); }
   .note { font-size:11px; color:var(--muted); margin-top:14px; line-height:1.4; }
   @media (max-width: 760px) { #app { grid-template-columns:1fr; grid-template-rows: 42vh 1fr; } aside { border-right:0; border-bottom:1px solid var(--line); } }
@@ -45,7 +46,7 @@
     <h1>Heritage map preview</h1>
     <p class="sub">Every marker is a record in the content database with coordinates. The map asks for what's in view; toggling a layer is a filter on the same records. Fictional site, not a client product.</p>
     <div class="layers" id="layers"></div>
-    <button id="routeBtn" class="route">Show a day route: Burren &amp; Cliffs</button>
+    <button id="routeBtn" class="route" disabled>Show a day route: Burren &amp; Cliffs</button>
     <div id="routeInfo" class="sub" style="margin-top:6px"></div>
     <div class="list" id="list"></div>
     <p class="note" id="engineNote"></p>
@@ -66,17 +67,24 @@ const USE_MAPBOX = TOKEN.startsWith('pk.');
 const ENGINE = USE_MAPBOX
   ? { js:'https://api.mapbox.com/mapbox-gl-js/v3.7.0/mapbox-gl.js', css:'https://api.mapbox.com/mapbox-gl-js/v3.7.0/mapbox-gl.css',
       style:'mapbox://styles/mapbox/outdoors-v12', bold:['DIN Pro Bold','Arial Unicode MS Bold'], regular:['DIN Pro Regular','Arial Unicode MS Regular'] }
-  : { js:'https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js', css:'https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css',
+  : { js:'https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js', css:'https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.css',
+      jsAlt:'https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js', cssAlt:'https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css',
       style:'https://tiles.openfreemap.org/styles/positron', bold:['Noto Sans Bold'], regular:['Noto Sans Regular'] };
 document.getElementById('engineNote').innerHTML = USE_MAPBOX
   ? 'Rendered with <b>Mapbox GL JS</b>: Mapbox Outdoors style, 3D terrain from Mapbox Terrain-DEM, and the day route from the <b>Mapbox Directions API</b>. Every marker is a record from the content database.'
   : 'Rendered with MapLibre GL (the open-source fork of Mapbox GL, same API) because no Mapbox token is configured; with a token the same page switches to Mapbox styles, terrain and Directions. Base map © OpenStreetMap contributors, tiles by OpenFreeMap.';
 
-function loadEngine() {
-  return new Promise((res, rej) => {
-    const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = ENGINE.css; document.head.appendChild(l);
-    const sc = document.createElement('script'); sc.src = ENGINE.js; sc.onload = res; sc.onerror = rej; document.head.appendChild(sc);
-  });
+function addScript(src) { return new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = src; sc.onload = res; sc.onerror = () => rej(new Error('could not load ' + src)); document.head.appendChild(sc); }); }
+function addCss(href) { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = href; document.head.appendChild(l); }
+async function loadEngine() {
+  addCss(ENGINE.css);
+  try { await addScript(ENGINE.js); }
+  catch (e) { if (!ENGINE.jsAlt) throw e; addCss(ENGINE.cssAlt); await addScript(ENGINE.jsAlt); }
+}
+function fail(e) {
+  console.error(e);
+  const m = document.getElementById('map');
+  m.insertAdjacentHTML('beforeend', `<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center;color:#5d6b5d;font-size:14px">The map could not start in this browser (${String(e && e.message || e).replace(/</g,'&lt;')}). Please reload the page; the screenshots show the same view.</div>`);
 }
 let map, GL;
 loadEngine().then(() => {
@@ -84,7 +92,8 @@ loadEngine().then(() => {
   if (USE_MAPBOX) GL.accessToken = TOKEN;
   map = new GL.Map({ container:'map', style:ENGINE.style, center:[-8.0, 53.3], zoom:6.2 });
   map.addControl(new GL.NavigationControl({ visualizePitch:true }), 'top-right');
-  const mapReady = new Promise(res => map.once('load', () => map.once('idle', res)));
+  map.on('error', e => console.warn('map', e && e.error && e.error.message));
+  const mapReady = new Promise(res => map.once('load', res));
   return Promise.all([fetch('sites.geojson').then(r => r.json()), mapReady]);
 }).then(([data]) => {
   sites = data;
@@ -109,13 +118,15 @@ loadEngine().then(() => {
   map.on('click','points', e => show(e.features[0].properties, e.features[0].geometry.coordinates));
   for (const l of ['clusters','points']) { map.on('mouseenter', l, () => map.getCanvas().style.cursor='pointer'); map.on('mouseleave', l, () => map.getCanvas().style.cursor=''); }
   renderLayers(); renderList();
-});
+  document.getElementById('routeBtn').disabled = false;
+}).catch(fail);
 
 // A suggested itinerary is just an ordered list of site ids. The route between them
 // comes from the Mapbox Directions API (driving); without a token, straight segments.
 const DAY_ROUTE = ['poulnabrone', 'caherconnell', 'moher', 'stbrigidswell-liscannor'];
 let routeOn = false;
 document.getElementById('routeBtn').addEventListener('click', async () => {
+  if (!map || !sites) return;
   const btn = document.getElementById('routeBtn'), info = document.getElementById('routeInfo');
   routeOn = !routeOn; btn.classList.toggle('on', routeOn);
   if (!routeOn) { map.getSource('route').setData({ type:'FeatureCollection', features:[] }); info.textContent = ''; btn.textContent = 'Show a day route: Burren & Cliffs'; return; }
