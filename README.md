@@ -2,6 +2,7 @@
 
 How I move a React/Vite/TypeScript app off a proprietary app-builder backend (bundled database, auth and AI) onto Supabase, without rewriting the screens and without losing anything. Plus a live preview of the map layer that a content database with coordinates makes possible.
 
+- **Live migration report:** https://getupworkdev.github.io/platform-migration-kit/ (every decision the sample migration made, per user and record)
 - **Live map preview:** https://getupworkdev.github.io/platform-migration-kit/map/
 - `npm test` runs 11 tests in under a second, no Supabase account, no Docker.
 

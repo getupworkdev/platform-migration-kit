@@ -6,7 +6,8 @@
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "migrate:dry": "tsx migrate/run.ts --export fixtures/legacy-export.json --dry-run"
+    "migrate:dry": "tsx migrate/run.ts --export fixtures/legacy-export.json --dry-run",
+    "report": "tsx migrate/report-json.ts"
   },
   "keywords": [],
   "author": "",

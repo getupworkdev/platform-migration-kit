@@ -1,0 +1,136 @@
+{
+  "exportedAt": "2026-10-30T09:00:00Z",
+  "firstRun": {
+    "users": {
+      "created": 3,
+      "alreadyMapped": 0,
+      "matchedByEmail": 0,
+      "skippedInvalid": [
+        "u_003",
+        "u_004"
+      ]
+    },
+    "content": {
+      "imported": 5,
+      "alreadyImported": 0,
+      "unresolvedAuthors": 1
+    },
+    "redirects": 2
+  },
+  "secondRun": {
+    "users": {
+      "created": 0,
+      "alreadyMapped": 3,
+      "matchedByEmail": 0,
+      "skippedInvalid": [
+        "u_003",
+        "u_004"
+      ]
+    },
+    "content": {
+      "imported": 0,
+      "alreadyImported": 5,
+      "unresolvedAuthors": 0
+    },
+    "redirects": 2
+  },
+  "users": [
+    {
+      "legacyId": "u_001",
+      "email": "Aoife.Byrne@example.com",
+      "name": "Aoife Byrne",
+      "hadPasswordHash": true,
+      "status": "created"
+    },
+    {
+      "legacyId": "u_002",
+      "email": "cian@example.com",
+      "name": "Cian Walsh",
+      "hadPasswordHash": false,
+      "status": "created"
+    },
+    {
+      "legacyId": "u_003",
+      "email": "aoife.byrne@example.com",
+      "name": "Aoife (duplicate signup)",
+      "hadPasswordHash": false,
+      "status": "skipped: duplicate of u_001"
+    },
+    {
+      "legacyId": "u_004",
+      "email": "not-an-email",
+      "name": "Broken Row",
+      "hadPasswordHash": false,
+      "status": "skipped: invalid email"
+    },
+    {
+      "legacyId": "u_005",
+      "email": "niamh@example.com",
+      "name": null,
+      "hadPasswordHash": false,
+      "status": "created"
+    }
+  ],
+  "content": [
+    {
+      "legacyId": "c_100",
+      "kind": "article",
+      "slug": "stone-circle-of-the-valley",
+      "title": "The Stone Circle of the Valley",
+      "authorResolved": true,
+      "published": true,
+      "rawFields": 11,
+      "extractedFields": 5
+    },
+    {
+      "legacyId": "c_101",
+      "kind": "article",
+      "slug": "the-well-at-dawn",
+      "title": "The Well at Dawn",
+      "authorResolved": true,
+      "published": true,
+      "rawFields": 8,
+      "extractedFields": 5
+    },
+    {
+      "legacyId": "c_102",
+      "kind": "article",
+      "slug": "draft-harvest-festivals",
+      "title": "Draft: Harvest Festivals",
+      "authorResolved": true,
+      "published": false,
+      "rawFields": 6,
+      "extractedFields": 5
+    },
+    {
+      "legacyId": "c_103",
+      "kind": "article",
+      "slug": "the-well-at-dawn-c_103",
+      "title": "The Well at Dawn (older duplicate)",
+      "authorResolved": false,
+      "published": true,
+      "rawFields": 7,
+      "extractedFields": 5
+    },
+    {
+      "legacyId": "c_104",
+      "kind": "page",
+      "slug": "about",
+      "title": "About",
+      "authorResolved": false,
+      "published": true,
+      "rawFields": 6,
+      "extractedFields": 5
+    }
+  ],
+  "redirects": [
+    {
+      "from": "/post/stone-circle-of-the-valley",
+      "to": "/articles/stone-circle-of-the-valley"
+    },
+    {
+      "from": "/post/the-well-at-dawn",
+      "to": "/articles/the-well-at-dawn"
+    }
+  ]
+}

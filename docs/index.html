@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Migration report</title>
+<style>
+  :root { --bg:#f6f3ec; --ink:#1f2a1f; --muted:#5d6b5d; --card:#fffdf8; --line:#d9d3c4; --ok:#2f6b4f; --warn:#b8651b; --bad:#9b2c2c; --accent:#1f6f9f; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family: Georgia, 'Times New Roman', serif; background:var(--bg); color:var(--ink); }
+  main { max-width:1040px; margin:0 auto; padding:32px 20px 60px; }
+  h1 { font-size:26px; margin:0 0 6px; font-weight:600; }
+  .lead { color:var(--muted); margin:0 0 22px; line-height:1.5; max-width:70ch; }
+  .flow { display:grid; grid-template-columns:1fr auto 1fr auto 1fr; gap:10px; align-items:center; margin:0 0 26px; }
+  .box { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
+  .box h3 { margin:0 0 6px; font-size:14px; letter-spacing:.02em; text-transform:uppercase; color:var(--muted); font-weight:600; }
+  .box ul { margin:0; padding-left:18px; font-size:14px; line-height:1.5; }
+  .arrow { font-size:26px; color:var(--muted); text-align:center; }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px,1fr)); gap:10px; margin:0 0 26px; }
+  .stat { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
+  .stat b { display:block; font-size:30px; line-height:1; margin-bottom:4px; font-weight:600; }
+  .stat span { font-size:13px; color:var(--muted); }
+  .stat.ok b { color:var(--ok); } .stat.warn b { color:var(--warn); } .stat.accent b { color:var(--accent); }
+  h2 { font-size:18px; margin:26px 0 10px; font-weight:600; }
+  table { width:100%; border-collapse:collapse; background:var(--card); border:1px solid var(--line); border-radius:12px; overflow:hidden; font-size:14px; }
+  th, td { text-align:left; padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { font-size:12px; text-transform:uppercase; letter-spacing:.03em; color:var(--muted); font-weight:600; background:#f3efe5; }
+  tr:last-child td { border-bottom:0; }
+  .pill { display:inline-block; font-size:12px; padding:2px 9px; border-radius:999px; color:#fff; white-space:nowrap; }
+  .pill.ok { background:var(--ok); } .pill.warn { background:var(--warn); } .pill.bad { background:var(--bad); } .pill.muted { background:#8a917f; }
+  code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size:12.5px; background:#efeadd; padding:1px 5px; border-radius:4px; }
+  .twice { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .note { font-size:13px; color:var(--muted); line-height:1.5; }
+  a { color:var(--ink); }
+  @media (max-width:760px) { .flow { grid-template-columns:1fr; } .arrow { transform:rotate(90deg); } .twice { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Migration report: what cutover day looks like</h1>
+  <p class="lead">This page renders the output of <code>npm run migrate:dry</code> on the sample export in this repository: every decision the migration made, per user and per record, and the proof that running it a second time changes nothing. The same report comes out of the real run. <a href="map/">Map preview →</a></p>
+
+  <div class="flow">
+    <div class="box"><h3>Legacy platform export</h3><ul><li>users (with vendor password hashes)</li><li>content records, any shape</li><li>old URL routes</li></ul></div>
+    <div class="arrow">→</div>
+    <div class="box"><h3>Migration script</h3><ul><li>accounts kept, passwords dropped</li><li>link by legacy id, then by email</li><li>raw record preserved as <code>jsonb</code></li><li>slugs fixed, redirects written</li></ul></div>
+    <div class="arrow">→</div>
+    <div class="box"><h3>Supabase</h3><ul><li><code>auth.users</code> + one-time login links</li><li><code>articles</code> with <code>legacy_raw</code></li><li><code>redirects</code>, RLS on every table</li></ul></div>
+  </div>
+
+  <div class="stats" id="stats"></div>
+
+  <h2>Users</h2>
+  <table><thead><tr><th>Legacy id</th><th>Email</th><th>Name</th><th>Had password hash</th><th>Decision</th></tr></thead><tbody id="users"></tbody></table>
+  <p class="note">Hashes from the old platform are never copied. Every kept account signs in with an email link the first time; duplicates and invalid rows are listed, not silently dropped.</p>
+
+  <h2>Content</h2>
+  <table><thead><tr><th>Legacy id</th><th>Kind</th><th>New slug</th><th>Title</th><th>Author</th><th>Published</th><th>Fields kept</th></tr></thead><tbody id="content"></tbody></table>
+  <p class="note">"Fields kept" compares the 5 fields the current screens use with the number of fields in the exported record; the full record is stored as <code>legacy_raw</code>, so the later restructuring into a proper content model loses nothing.</p>
+
+  <h2>Redirects</h2>
+  <table><thead><tr><th>Old URL</th><th></th><th>New URL</th></tr></thead><tbody id="redirects"></tbody></table>
+
+  <h2>Run it twice</h2>
+  <div class="twice" id="twice"></div>
+  <p class="note">A migration that can be re-run is one that can survive a crash halfway, or a fresh export the day before cutover.</p>
+</main>
+<script>
+fetch('report.json').then(r => r.json()).then(r => {
+  const f = r.firstRun;
+  document.getElementById('stats').innerHTML = [
+    ['ok', f.users.created, 'accounts created, no password'],
+    ['warn', f.users.skippedInvalid.length, 'user rows skipped, listed below'],
+    ['ok', f.content.imported, 'content records imported, raw kept'],
+    ['warn', f.content.unresolvedAuthors, 'author reference unresolved'],
+    ['accent', f.redirects, 'redirects from old URLs'],
+  ].map(([c,n,l]) => `<div class="stat ${c}"><b>${n}</b><span>${l}</span></div>`).join('');
+
+  document.getElementById('users').innerHTML = r.users.map(u => `<tr><td><code>${u.legacyId}</code></td><td>${u.email}</td><td>${u.name ?? '<span class="note">—</span>'}</td><td>${u.hadPasswordHash ? '<span class="pill muted">yes, not copied</span>' : 'no'}</td><td>${u.status === 'created' ? '<span class="pill ok">kept, login link</span>' : `<span class="pill ${u.status.includes('invalid') ? 'bad' : 'warn'}">${u.status}</span>`}</td></tr>`).join('');
+
+  document.getElementById('content').innerHTML = r.content.map(c => `<tr><td><code>${c.legacyId}</code></td><td>${c.kind}</td><td><code>${c.slug}</code></td><td>${c.title}</td><td>${c.authorResolved ? '<span class="pill ok">linked</span>' : '<span class="pill warn">unknown, left empty</span>'}</td><td>${c.published ? 'yes' : '<span class="pill muted">draft</span>'}</td><td>${c.rawFields} of ${c.rawFields} <span class="note">(${c.extractedFields} extracted)</span></td></tr>`).join('');
+
+  document.getElementById('redirects').innerHTML = r.redirects.map(x => `<tr><td><code>${x.from}</code></td><td>→</td><td><code>${x.to}</code></td></tr>`).join('');
+
+  const run = (title, x) => `<div class="box"><h3>${title}</h3><ul><li>users created: <b>${x.users.created}</b>, already mapped: <b>${x.users.alreadyMapped}</b></li><li>content imported: <b>${x.content.imported}</b>, already imported: <b>${x.content.alreadyImported}</b></li><li>redirects written: <b>${x.redirects}</b></li></ul></div>`;
+  document.getElementById('twice').innerHTML = run('First run', r.firstRun) + run('Second run, same export', r.secondRun);
+});
+</script>
+</body>
+</html>
