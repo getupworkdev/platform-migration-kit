@@ -44,7 +44,7 @@ The report says exactly what happened (`created`, `alreadyMapped`, `matchedByEma
 
 ## The map preview (`docs/map/`)
 
-A static page: 15 real Irish heritage sites as GeoJSON with a `kind` (monument, sacred site, mythology, holy well, destination) and an `evidence` level (archaeologically supported / history and tradition / folklore), clustered markers, layer toggles, a list that mirrors the map, and a card per site linking to its article. It is rendered with MapLibre GL, the open-source fork of Mapbox GL with the same API, so it needs no access token; in production the same code runs on Mapbox GL with Mapbox styles and the Directions API for routes between itinerary stops.
+A static page: 15 real Irish heritage sites as GeoJSON with a `kind` (monument, sacred site, mythology, holy well, destination) and an `evidence` level (archaeologically supported / history and tradition / folklore), clustered markers, layer toggles, a list that mirrors the map, and a card per site linking to its article. It runs on **Mapbox GL JS** when a public token is set in [`docs/map/config.js`](docs/map/config.js): Mapbox Outdoors style, 3D terrain from Mapbox Terrain-DEM, and a suggested day route drawn by the Mapbox Directions API with distance and drive time. Without a token it falls back to MapLibre GL (the open-source fork, same API) and draws the route as straight segments.
 
 The point of the preview is the data model, not the pins: in the real system `sites.geojson` is a query against the content database (`select ... where location && viewport and kind = any(...)`), so a newly published article with coordinates appears on the map the moment it is published, and an AI itinerary planner reads the same records.
 

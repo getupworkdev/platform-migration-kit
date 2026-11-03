@@ -4,8 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Heritage map preview</title>
-<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
-<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="config.js"></script>
 <style>
   :root { --bg:#f6f3ec; --ink:#1f2a1f; --muted:#5d6b5d; --card:#fffdf8; --line:#d9d3c4;
           --monument:#7a5230; --sacred:#2f6b4f; --mythology:#5b3f8a; --well:#1f6f9f; --destination:#b8651b; }
@@ -34,6 +33,8 @@
   .card a { font-size:13px; color:var(--ink); }
   .card .close { position:absolute; top:8px; right:10px; border:0; background:none; font-size:18px; cursor:pointer; color:var(--muted); }
   #map { position:relative; }
+  .route { width:100%; margin:0 0 12px; padding:9px 12px; border-radius:8px; border:1px solid var(--ink); background:var(--ink); color:#fff; font:inherit; font-size:14px; cursor:pointer; }
+  .route.on { background:#fff; color:var(--ink); }
   .note { font-size:11px; color:var(--muted); margin-top:14px; line-height:1.4; }
   @media (max-width: 760px) { #app { grid-template-columns:1fr; grid-template-rows: 42vh 1fr; } aside { border-right:0; border-bottom:1px solid var(--line); } }
 </style>
@@ -44,8 +45,10 @@
     <h1>Heritage map preview</h1>
     <p class="sub">Every marker is a record in the content database with coordinates. The map asks for what's in view; toggling a layer is a filter on the same records. Fictional site, not a client product.</p>
     <div class="layers" id="layers"></div>
+    <button id="routeBtn" class="route">Show a day route: Burren &amp; Cliffs</button>
+    <div id="routeInfo" class="sub" style="margin-top:6px"></div>
     <div class="list" id="list"></div>
-    <p class="note">Rendered with MapLibre GL (the open-source fork of Mapbox GL, same API) so this page needs no access token. In production the same code runs on Mapbox GL with Mapbox styles and the Directions API for routes. Base map © OpenStreetMap contributors, tiles by OpenFreeMap.</p>
+    <p class="note" id="engineNote"></p>
   </aside>
   <div id="map">
     <div class="card" id="card"><button class="close" id="close">×</button><div id="cardBody"></div></div>
@@ -58,28 +61,77 @@ const EVIDENCE = { archaeological:'Archaeologically supported', mixed:'History a
 const active = new Set(Object.keys(KINDS));
 let sites;
 
-const map = new maplibregl.Map({ container:'map', style:'https://tiles.openfreemap.org/styles/positron', center:[-8.0, 53.3], zoom:6.2, attributionControl:true });
-map.addControl(new maplibregl.NavigationControl(), 'top-right');
+const TOKEN = (window.MAPBOX_TOKEN || '').trim();
+const USE_MAPBOX = TOKEN.startsWith('pk.');
+const ENGINE = USE_MAPBOX
+  ? { js:'https://api.mapbox.com/mapbox-gl-js/v3.7.0/mapbox-gl.js', css:'https://api.mapbox.com/mapbox-gl-js/v3.7.0/mapbox-gl.css',
+      style:'mapbox://styles/mapbox/outdoors-v12', bold:['DIN Pro Bold','Arial Unicode MS Bold'], regular:['DIN Pro Regular','Arial Unicode MS Regular'] }
+  : { js:'https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js', css:'https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css',
+      style:'https://tiles.openfreemap.org/styles/positron', bold:['Noto Sans Bold'], regular:['Noto Sans Regular'] };
+document.getElementById('engineNote').innerHTML = USE_MAPBOX
+  ? 'Rendered with <b>Mapbox GL JS</b>: Mapbox Outdoors style, 3D terrain from Mapbox Terrain-DEM, and the day route from the <b>Mapbox Directions API</b>. Every marker is a record from the content database.'
+  : 'Rendered with MapLibre GL (the open-source fork of Mapbox GL, same API) because no Mapbox token is configured; with a token the same page switches to Mapbox styles, terrain and Directions. Base map © OpenStreetMap contributors, tiles by OpenFreeMap.';
 
-const mapReady = new Promise(res => map.once('load', () => map.once('idle', res)));
-fetch('sites.geojson').then(r => r.json()).then(data => {
-  sites = data;
-  mapReady.then(() => {
-    map.addSource('sites', { type:'geojson', data, cluster:true, clusterRadius:40, clusterMaxZoom:9 });
-    map.addLayer({ id:'clusters', type:'circle', source:'sites', filter:['has','point_count'],
-      paint:{ 'circle-color':'#1f2a1f', 'circle-radius':['step',['get','point_count'],16,5,22,10,28], 'circle-opacity':.85 } });
-    map.addLayer({ id:'cluster-count', type:'symbol', source:'sites', filter:['has','point_count'],
-      layout:{ 'text-field':['get','point_count_abbreviated'], 'text-font':['Noto Sans Bold'], 'text-size':12 }, paint:{ 'text-color':'#fff' } });
-    map.addLayer({ id:'points', type:'circle', source:'sites', filter:['!',['has','point_count']],
-      paint:{ 'circle-color':['match',['get','kind'], ...Object.entries(COLORS).flat(), '#333'], 'circle-radius':8, 'circle-stroke-width':2, 'circle-stroke-color':'#fff' } });
-    map.addLayer({ id:'labels', type:'symbol', source:'sites', filter:['!',['has','point_count']], minzoom:7,
-      layout:{ 'text-field':['get','name'], 'text-font':['Noto Sans Regular'], 'text-size':11, 'text-offset':[0,1.2], 'text-anchor':'top' }, paint:{ 'text-color':'#1f2a1f', 'text-halo-color':'#fff', 'text-halo-width':1 } });
-    map.on('click','clusters', e => { const f = map.queryRenderedFeatures(e.point,{layers:['clusters']})[0];
-      map.getSource('sites').getClusterExpansionZoom(f.properties.cluster_id, (err, z) => { if (!err) map.easeTo({ center:f.geometry.coordinates, zoom:z }); }); });
-    map.on('click','points', e => show(e.features[0].properties, e.features[0].geometry.coordinates));
-    for (const l of ['clusters','points']) { map.on('mouseenter', l, () => map.getCanvas().style.cursor='pointer'); map.on('mouseleave', l, () => map.getCanvas().style.cursor=''); }
-    renderLayers(); renderList();
+function loadEngine() {
+  return new Promise((res, rej) => {
+    const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = ENGINE.css; document.head.appendChild(l);
+    const sc = document.createElement('script'); sc.src = ENGINE.js; sc.onload = res; sc.onerror = rej; document.head.appendChild(sc);
   });
+}
+let map, GL;
+loadEngine().then(() => {
+  GL = USE_MAPBOX ? window.mapboxgl : window.maplibregl;
+  if (USE_MAPBOX) GL.accessToken = TOKEN;
+  map = new GL.Map({ container:'map', style:ENGINE.style, center:[-8.0, 53.3], zoom:6.2 });
+  map.addControl(new GL.NavigationControl({ visualizePitch:true }), 'top-right');
+  const mapReady = new Promise(res => map.once('load', () => map.once('idle', res)));
+  return Promise.all([fetch('sites.geojson').then(r => r.json()), mapReady]);
+}).then(([data]) => {
+  sites = data;
+  if (USE_MAPBOX) {
+    map.addSource('dem', { type:'raster-dem', url:'mapbox://mapbox.mapbox-terrain-dem-v1', tileSize:512, maxzoom:14 });
+    map.setTerrain({ source:'dem', exaggeration:1.6 });
+  }
+  map.addSource('sites', { type:'geojson', data, cluster:true, clusterRadius:40, clusterMaxZoom:9 });
+  map.addSource('route', { type:'geojson', data:{ type:'FeatureCollection', features:[] } });
+  map.addLayer({ id:'route-casing', type:'line', source:'route', layout:{ 'line-join':'round', 'line-cap':'round' }, paint:{ 'line-color':'#fff', 'line-width':8 } });
+  map.addLayer({ id:'route', type:'line', source:'route', layout:{ 'line-join':'round', 'line-cap':'round' }, paint:{ 'line-color':'#9b2c2c', 'line-width':4 } });
+  map.addLayer({ id:'clusters', type:'circle', source:'sites', filter:['has','point_count'],
+    paint:{ 'circle-color':'#1f2a1f', 'circle-radius':['step',['get','point_count'],16,5,22,10,28], 'circle-opacity':.85 } });
+  map.addLayer({ id:'cluster-count', type:'symbol', source:'sites', filter:['has','point_count'],
+    layout:{ 'text-field':['get','point_count_abbreviated'], 'text-font':ENGINE.bold, 'text-size':12 }, paint:{ 'text-color':'#fff' } });
+  map.addLayer({ id:'points', type:'circle', source:'sites', filter:['!',['has','point_count']],
+    paint:{ 'circle-color':['match',['get','kind'], ...Object.entries(COLORS).flat(), '#333'], 'circle-radius':8, 'circle-stroke-width':2, 'circle-stroke-color':'#fff' } });
+  map.addLayer({ id:'labels', type:'symbol', source:'sites', filter:['!',['has','point_count']], minzoom:7,
+    layout:{ 'text-field':['get','name'], 'text-font':ENGINE.regular, 'text-size':11, 'text-offset':[0,1.2], 'text-anchor':'top' }, paint:{ 'text-color':'#1f2a1f', 'text-halo-color':'#fff', 'text-halo-width':1 } });
+  map.on('click','clusters', e => { const f = map.queryRenderedFeatures(e.point,{layers:['clusters']})[0];
+    map.getSource('sites').getClusterExpansionZoom(f.properties.cluster_id, (err, z) => { if (!err) map.easeTo({ center:f.geometry.coordinates, zoom:z }); }); });
+  map.on('click','points', e => show(e.features[0].properties, e.features[0].geometry.coordinates));
+  for (const l of ['clusters','points']) { map.on('mouseenter', l, () => map.getCanvas().style.cursor='pointer'); map.on('mouseleave', l, () => map.getCanvas().style.cursor=''); }
+  renderLayers(); renderList();
+});
+
+// A suggested itinerary is just an ordered list of site ids. The route between them
+// comes from the Mapbox Directions API (driving); without a token, straight segments.
+const DAY_ROUTE = ['poulnabrone', 'caherconnell', 'moher', 'stbrigidswell-liscannor'];
+let routeOn = false;
+document.getElementById('routeBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('routeBtn'), info = document.getElementById('routeInfo');
+  routeOn = !routeOn; btn.classList.toggle('on', routeOn);
+  if (!routeOn) { map.getSource('route').setData({ type:'FeatureCollection', features:[] }); info.textContent = ''; btn.textContent = 'Show a day route: Burren & Cliffs'; return; }
+  btn.textContent = 'Hide the route';
+  const stops = DAY_ROUTE.map(id => sites.features.find(f => f.properties.id === id));
+  const coords = stops.map(f => f.geometry.coordinates);
+  let line = { type:'LineString', coordinates:coords }, summary = '';
+  if (USE_MAPBOX) {
+    const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${coords.map(c => c.join(',')).join(';')}?geometries=geojson&overview=full&access_token=${TOKEN}`;
+    const r = await fetch(url).then(r => r.json()).catch(() => null);
+    if (r?.routes?.[0]) { line = r.routes[0].geometry; summary = ` · ${(r.routes[0].distance/1000).toFixed(0)} km, about ${Math.round(r.routes[0].duration/60)} min driving`; }
+  }
+  map.getSource('route').setData({ type:'Feature', geometry:line, properties:{} });
+  info.innerHTML = stops.map((f,i) => `${i+1}. ${f.properties.name}`).join(' → ') + summary;
+  const b = coords.reduce((b, c) => b.extend(c), new GL.LngLatBounds(coords[0], coords[0]));
+  map.fitBounds(b, { padding:80, pitch: USE_MAPBOX ? 50 : 0, bearing: USE_MAPBOX ? -20 : 0, duration:1600 });
 });
 
 function applyFilter() {
@@ -96,7 +148,7 @@ function renderList() {
   const items = sites.features.filter(f => active.has(f.properties.kind)).sort((a,b)=>a.properties.name.localeCompare(b.properties.name));
   document.getElementById('list').innerHTML = items.map(f => `<div class="item" data-id="${f.properties.id}"><b>${f.properties.name}</b><span>${f.properties.region}</span></div>`).join('');
   document.querySelectorAll('.item').forEach(el => el.addEventListener('click', () => { const f = items.find(x => x.properties.id === el.dataset.id);
-    map.flyTo({ center:f.geometry.coordinates, zoom:10 }); show(f.properties, f.geometry.coordinates); }));
+    map.flyTo({ center:f.geometry.coordinates, zoom:11.5, pitch: USE_MAPBOX ? 55 : 0, bearing: USE_MAPBOX ? -15 : 0 }); show(f.properties, f.geometry.coordinates); }));
 }
 function show(p, coords) {
   document.querySelectorAll('.item').forEach(el => el.classList.toggle('active', el.dataset.id === p.id));
