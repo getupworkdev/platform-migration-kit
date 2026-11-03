@@ -1,0 +1,25 @@
+{
+  "name": "platform-migration-kit",
+  "version": "1.0.0",
+  "description": "Moving a React/Vite app off a proprietary app-builder backend onto Supabase: backend adapter, passwordless user import, content preserved verbatim, redirects, idempotent and tested.",
+  "main": "index.js",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "migrate:dry": "tsx migrate/run.ts --export fixtures/legacy-export.json --dry-run"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.118.0"
+  },
+  "type": "module",
+  "private": true
+}
